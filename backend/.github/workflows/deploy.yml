@@ -1,0 +1,42 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.ICLASS_TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ICLASS_REMOTE_HOST }}
+          username: ${{ secrets.ICLASS_REMOTE_USER }}
+          key: ${{ secrets.ICLASS_SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /home/GHactions-iclass/staging/iclass/back
+            git pull origin main
+            if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
+              docker compose down
+              docker compose build --no-cache
+              docker compose up -d
+            elif [ -f Dockerfile ]; then
+              docker build -t backend-app .
+              docker run -d --name backend-app -p 8000:8000 backend-app
+            fi
+            docker image prune -f
+            echo "Backend deployed at $(date)"

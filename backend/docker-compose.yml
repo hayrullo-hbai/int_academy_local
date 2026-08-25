@@ -1,0 +1,43 @@
+name: int-academy-platform
+
+# Run from this folder:  docker compose up --build
+# The app's startup hook runs create_all + seed (RBAC + admin) before serving.
+services:
+  backend:
+    build: .
+    env_file: ./.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-academy}:${POSTGRES_PASSWORD:-academy}@db:5432/${POSTGRES_DB:-academy_db}
+      GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-/app/secrets/gsheet-service-account.json}
+      ONBOARDING_SHEET_ID: ${ONBOARDING_SHEET_ID:-}
+      ONBOARDING_SHEET_GID: ${ONBOARDING_SHEET_GID:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./secrets:/app/secrets:ro
+      # Persist uploaded files (datasets, onboarding proofs) across rebuilds.
+      - media_data:/app/media
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    env_file: ./.env
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_data:

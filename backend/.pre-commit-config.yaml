@@ -1,0 +1,123 @@
+# Pre-commit configuration for int-academy-platform-backend.
+# Revisions are pinned to immutable tags; run `pre-commit autoupdate` to bump.
+fail_fast: false
+
+default_language_version:
+  python: python3.10
+
+exclude: |
+  (?x)^(
+      \.git/.*
+    | \.venv/.*
+    | venv/.*
+    | env/.*
+    | build/.*
+    | dist/.*
+    | site/.*
+    | node_modules/.*
+    | logs?/.*
+    | backups?/.*
+    | datasets?/.*
+    | data/.*
+    | volumes/.*
+    | tmp/.*
+    | media/.*
+  )$
+
+repos:
+  # --- Basic gatekeepers (mandatory) ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-json
+        files: \.json$
+      - id: check-toml
+        files: \.toml$
+      - id: check-yaml
+        files: \.ya?ml$
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: fix-byte-order-marker
+      - id: detect-private-key
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: check-illegal-windows-names
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2500"]
+      - id: no-commit-to-branch
+        args: ["--branch=main", "--branch=master", "--branch=dev"]
+      - id: check-ast
+      - id: check-builtin-literals
+
+  # --- Security (mandatory) ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+
+  # --- Shell scripts ---
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        files: \.sh$
+
+  # --- Markdown ---
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.48.0
+    hooks:
+      - id: markdownlint
+        args: ["--fix"]
+        exclude: ^(CHANGELOG\.md|docs/release-notes\.md)$
+
+  # --- Dockerfile ---
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1
+    hooks:
+      - id: hadolint-docker
+
+  # --- Python: formatters (auto-fix, active) ---
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        args: ["--target-version=py310"]
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.19.1
+    hooks:
+      - id: pyupgrade
+        args: ["--py310-plus"]
+
+  # --- Python: linters/security/types ---
+  # Set to stages: [manual] until a dedicated cleanup PR. They install and run on
+  # demand (`pre-commit run <id> --all-files`) but do NOT block commits or CI yet.
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        stages: [manual]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        stages: [manual]
+
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.390
+    hooks:
+      - id: pyright
+        stages: [manual]

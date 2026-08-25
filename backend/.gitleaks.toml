@@ -1,0 +1,16 @@
+# Extends the default gitleaks ruleset and allowlists ONLY .env.example, which
+# contains documented, non-functional development placeholders. This is the
+# justified, documented exception required by the pre-commit convention, not a
+# blanket suppression. Do NOT widen this to real source files.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented dev placeholder values in .env.example"
+paths = [
+  '''^\.env\.example$''',
+  # .secrets.baseline contains hashed snapshots of known findings; gitleaks
+  # would flag the hashes themselves as generic-api-key. This is the standard
+  # pre-commit pattern — the baseline is reviewed and audited, not raw secrets.
+  '''^\.secrets\.baseline$''',
+]
