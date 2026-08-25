@@ -1,0 +1,108 @@
+# Standalone compose for the Academy platform DEPENDENCIES.
+#
+# Brings up everything the backend depends on for code/ML execution:
+#   - judge0-server / judge0-worker / judge0-db / judge0-redis  (code sandbox)
+#   - ml-runner                                                 (ML/data cells)
+#   - cv-generator                                              (CV rendering)
+#
+# The backend + frontend are NOT here — they live in the root compose one folder
+# up. Use this file to run the dependencies on their own, e.g. on a dedicated
+# execution host:
+#
+#   cd int-academy-platform-dependencies
+#   cp judge0/judge0.conf.example judge0/judge0.conf   # then fill in secrets
+#   docker compose up -d
+#
+# Health:
+#   curl http://localhost:2358/about        # judge0
+#   curl http://localhost:8080/health       # ml-runner
+#   curl http://localhost:8091/health       # cv-generator
+#
+# NOTE: judge0.conf is git-ignored (holds the auth tokens + db/redis passwords).
+# JUDGE0_AUTH_TOKEN in the backend's .env must equal AUTHN_TOKEN/AUTHZ_TOKEN here.
+
+x-logging:
+  &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100M
+
+services:
+  judge0-server:
+    image: judge0/judge0:latest
+    volumes:
+      - ./judge0/judge0.conf:/judge0.conf:ro
+    ports:
+      # Configurable host port (set JUDGE0_PORT in .env) so this stack can
+      # coexist with another already bound to 2358. Container port is fixed.
+      - "${JUDGE0_PORT:-2358}:2358"
+    privileged: true          # judge0 needs cgroup access; some cloud VMs block this
+    <<: *default-logging
+    restart: always
+    depends_on:
+      - judge0-db
+      - judge0-redis
+
+  judge0-worker:
+    image: judge0/judge0:latest
+    command: ["./scripts/workers"]
+    volumes:
+      - ./judge0/judge0.conf:/judge0.conf:ro
+    privileged: true
+    <<: *default-logging
+    restart: always
+    depends_on:
+      - judge0-db
+      - judge0-redis
+
+  judge0-db:
+    image: postgres:16.2
+    env_file: judge0/judge0.conf
+    volumes:
+      - judge0_data:/var/lib/postgresql/data/
+    <<: *default-logging
+    restart: always
+
+  judge0-redis:
+    image: redis:7.2.4
+    command: [
+      "bash", "-c",
+      'docker-entrypoint.sh --appendonly no --requirepass "$$REDIS_PASSWORD"'
+    ]
+    env_file: judge0/judge0.conf
+    <<: *default-logging
+    restart: always
+
+  ml-runner:
+    build: ./ml-runner
+    ports:
+      # Host port is configurable (set ML_RUNNER_PORT in .env) to avoid clashing
+      # with another stack already on 8080; the container port stays 8080, so the
+      # backend's MLRUNNER_URL=http://ml-runner:8080 is unaffected.
+      - "${ML_RUNNER_PORT:-8090}:8080"
+    environment:
+      ML_TIMEOUT: "${ML_TIMEOUT:-120}"   # max seconds per run
+      ML_MEM_MB: "${ML_MEM_MB:-1024}"    # memory cap per run (MB)
+      ML_FSIZE_MB: "${ML_FSIZE_MB:-50}"  # max output file size (MB)
+    volumes:
+      - ml_datasets:/datasets
+    <<: *default-logging
+    restart: always
+
+  cv-generator:
+    build: ./cv-generator
+    ports:
+      # Host port is configurable (set CV_GENERATOR_PORT in .env) to avoid clashing
+      # with another stack already on 8080; the container port stays 8080, so the
+      # backend's CV_GENERATOR_URL=http://cv-generator:8080 is unaffected.
+      - "${CV_GENERATOR_PORT:-8091}:8080"
+    environment:
+      FRONTEND_PUBLIC_URL: "${FRONTEND_PUBLIC_URL:-https://iclass.ai}"
+      MEDIA_URL: "${MEDIA_URL:-https://iclass.ai/media}"
+    <<: *default-logging
+    restart: always
+
+volumes:
+  judge0_data:
+  ml_datasets:
